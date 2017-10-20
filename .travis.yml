@@ -12,4 +12,4 @@ notifications:
       - nicekingwei@sina.com
 
 script:
-  - sbt ^scripted
+  - sbt ^publishLocal

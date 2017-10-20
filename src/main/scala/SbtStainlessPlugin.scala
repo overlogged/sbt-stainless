@@ -1,36 +1,34 @@
 package org.zjulambda.scala
 
 import sbt._
-import scala.reflect.io.Directory
+import sbt.Keys.sources
+import scala.sys.process
 
 object SbtStainlessPlugin extends AutoPlugin {
+
+  object autoImport {
+    val stainlessBackend = SettingKey[String]("backend for stainless")
+    val stainlessFlags = SettingKey[Seq[String]]("flags for stainless")
+    val stainlessVerify = TaskKey[Unit]("verify","Verify this project using stainless")
+  }
+  import autoImport._
+
   override def trigger = allRequirements
-  override def globalSettings = Seq(
-    Keys.commands += StainlessCommand
+  override lazy val projectSettings:Seq[sbt.Def.Setting[_]] = Seq(
+    stainlessBackend:="scalac",
+    stainlessFlags:= Seq("--vccache"),
+    sources in stainlessVerify := (sources in Compile).value,
+    stainlessVerify:= {
+      val flags = stainlessFlags.value
+      val backend = stainlessBackend.value
+      val files = sources.in(stainlessVerify).value.map(_.getAbsolutePath)
+      doVerify(backend,files,flags)
+    }
   )
 
-  var backend = "scalac"
-
-  private[this] final val command = "verify"
-  private[this] final val brief = s"Usage: $command <arg1> <arg2> ..."
-  private[this] final val info = "Verify scala code using stainless."
-
-  private[this] final val detail = s"""
-    $info
-    $brief
-"""
-
-  def subDir(dir:File):Iterator[File] = {
-    val dirs = dir.listFiles().filter(_.isDirectory())
-    val files = dir.listFiles().filter(_.isFile())
-    files.toIterator ++ dirs.toIterator.flatMap(subDir _)
+  def doVerify(backend:String,files:Seq[String],flags:Seq[String]): Unit = {
+    val cmd = (files++flags).foldLeft(s"stainless-$backend")(_+" "+_)
+    println(cmd)
+    process.Process(cmd) !
   }
-
-  lazy val StainlessCommand =
-    Command.args(command, (brief, info), detail, brief) { (state, args) =>
-      subDir(new File(".")) foreach { file => if(file.getName.endsWith(".scala"))
-        Resolvers.run((s"stainless-$backend $file --vccache" :: args.toList): _*)
-      }
-      state
-    }
 }
